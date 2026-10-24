@@ -14,6 +14,7 @@ TARGET_NAME="${TARGET_NAME:-Kylin V10 SP3 (aarch64)}"
 GLIBC_MAX="${GLIBC_MAX:-2.28}"
 EXPECT_ARCH="${EXPECT_ARCH:-aarch64}"
 ARCH_HINT="${ARCH_HINT:-ARM aarch64}"
+PGMAJOR="${PGMAJOR:-13}"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
@@ -71,17 +72,17 @@ SRV="$TOP/$(find RPMS -name '*-server-*.rpm' -not -name '*debug*' -not -name '*.
 [ -n "$SRV" ] && [ "$SRV" != "$TOP/" ] || { echo "!! 找不到 server 主包"; exit 1; }
 mkdir -p "$WORK/u"
 ( cd "$WORK" && rpm2cpio "$SRV" | cpio -idm --quiet 2>/dev/null ) || true
-UNIT="$WORK/usr/lib/systemd/system/postgresql-13.service"
+UNIT="$WORK/usr/lib/systemd/system/postgresql-${PGMAJOR}.service"
 if [ -f "$UNIT" ]; then
-    echo "    --- postgresql-13.service ---"
+    echo "    --- postgresql-${PGMAJOR}.service ---"
     grep -E '^(Type|User|Group|Environment|ExecStart|ExecStartPre|ExecReload)=' "$UNIT" | sed 's/^/        /'
 else
-    echo "!! 单元文件缺失: postgresql-13.service"; exit 1
+    echo "!! 单元文件缺失: postgresql-${PGMAJOR}.service"; exit 1
 fi
-grep -q 'postgresql-13-initdb' "$UNIT" \
-    || { echo "!! 单元未引用 postgresql-13-initdb，首启不会自动 initdb"; exit 1; }
-[ -f "$WORK/usr/bin/postgresql-13-initdb" ] \
-    || { echo "!! 缺少 /usr/bin/postgresql-13-initdb"; exit 1; }
+grep -q "postgresql-${PGMAJOR}-initdb" "$UNIT" \
+    || { echo "!! 单元未引用 postgresql-${PGMAJOR}-initdb，首启不会自动 initdb"; exit 1; }
+[ -f "$WORK/usr/bin/postgresql-${PGMAJOR}-initdb" ] \
+    || { echo "!! 缺少 /usr/bin/postgresql-${PGMAJOR}-initdb"; exit 1; }
 
 echo "    systemd-analyze verify:"
 systemd-analyze verify "$UNIT" 2>&1 | sed 's/^/        /' || true
