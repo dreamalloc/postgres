@@ -12,6 +12,7 @@ dnf -y makecache >/dev/null 2>&1 || :
 dnf -y --setopt=install_weak_deps=False --setopt=keepcache=1 install \
     gcc gcc-c++ make \
     readline-devel zlib-devel openssl-devel libxml2-devel libxslt-devel \
+    lz4-devel zstd-devel tcl-devel libuuid-devel \
     gettext bison flex \
     perl perl-devel perl-ExtUtils-Embed python3-devel \
     systemd-devel \
@@ -36,3 +37,19 @@ gcc --version | sed -n '1p'
 make --version | sed -n '1p'
 ldd --version | sed -n '1p'
 rpm --version
+
+# --- 官方源码包（PGDG 布局需要 tarball 内的预生成 man 页）---
+PGVERSION="${PGVERSION:?需要 PGVERSION，如 15.17}"
+SRC_TARBALL_NAME="${SRC_TARBALL_NAME:-postgresql-${PGVERSION}.tar.bz2}"
+SRC_CACHE="${SRC_CACHE:-/var/cache/pgsrc}"
+SRC_TARBALL="${SRC_CACHE}/${SRC_TARBALL_NAME}"
+mkdir -p "${SRC_CACHE}"
+if [ ! -s "${SRC_TARBALL}" ]; then
+    echo "==> 下载源码包 ${SRC_TARBALL_NAME}"
+    curl -fL --retry 3 --connect-timeout 20 \
+        -o "${SRC_TARBALL}.part" \
+        "https://download.postgresql.org/pub/source/v${PGVERSION}/${SRC_TARBALL_NAME}"
+    mv -f "${SRC_TARBALL}.part" "${SRC_TARBALL}"
+fi
+tar -tf "${SRC_TARBALL}" >/dev/null
+echo "    OK: $(du -h "${SRC_TARBALL}" | cut -f1)  ${SRC_TARBALL}"
