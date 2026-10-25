@@ -1,20 +1,14 @@
 name: "Build PostgreSQL 15.17 RPM (Kylin V10 SP3 / aarch64)"
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 与 MySQL 那套（build-mysql57-kylin-arm64.yml）同构，差异点：
-#   1. PG 用 autoconf（源码自带 configure），没有 CMake、没有 Boost
-#   2. 打包工程与源码在同一个仓库：pkg 取当前分支，src 取 REL_15_17 tag
-#   3. 版本号从 configure 的 PACKAGE_VERSION 读
+# 按 PGDG 官方布局打包：前缀 /usr/pgsql-15、数据目录 /var/lib/pgsql/15/data、
+# postgresql-15-setup initdb、10 子包结构。
+# 源码用官方 release tarball（含预生成 man 页），spec 为参数化的 postgresql.spec。
 # ─────────────────────────────────────────────────────────────────────────────
 
 on:
   workflow_dispatch:
     inputs:
-      source_ref:
-        description: "PostgreSQL 源码 ref（tag / 分支 / commit）"
-        required: true
-        default: "REL_15_17"
-        type: string
       dist_tag:
         description: "Release 后缀，写入 Release: 1<dist_tag>"
         required: true
@@ -31,7 +25,7 @@ on:
         default: false
         type: boolean
       base_image:
-        description: "构建容器镜像（默认麒麟 V10 SP3；可临时改用其它同代镜像）"
+        description: "构建容器镜像（默认麒麟 V10 SP3）"
         required: true
         default: "hxsoong/kylin:v10-sp3"
         type: string
@@ -40,15 +34,17 @@ permissions:
   contents: write
 
 concurrency:
-  group: build-pg15-kylin-${{ github.ref }}
+  group: build-pg15-ky10-${{ github.ref }}
   cancel-in-progress: false
 
 env:
-  SRC_REF: ${{ github.event.inputs.source_ref || 'REL_15_17' }}
-  DIST_TAG: ${{ github.event.inputs.dist_tag || '.ky10' }}
-  SRC_NAME: postgresql-15.17
-  SPEC_FILE: postgresql15.spec
+  PGVERSION: "15.17"
   PGMAJOR: "15"
+  SRC_NAME: postgresql-15.17
+  SRC_TARBALL_NAME: postgresql-15.17.tar.bz2
+  SRC_TARBALL: /var/cache/pgsrc/postgresql-15.17.tar.bz2
+  SPEC_FILE: postgresql.spec
+  DIST_TAG: ${{ github.event.inputs.dist_tag || '.ky10' }}
   BUILD_FLAVOR: kylin
   RPMBUILD_TOP: /build/rpmbuild
   TARGET_NAME: "Kylin V10 SP3 (aarch64)"
@@ -60,7 +56,7 @@ jobs:
   build:
     name: rpmbuild (aarch64 / rockylinux8)
     runs-on: ubuntu-24.04-arm
-    timeout-minutes: 120
+    timeout-minutes: 150
     container:
       image: ${{ github.event.inputs.base_image }}
       options: --user root
@@ -73,7 +69,7 @@ jobs:
           echo "cpu       : $(nproc)"
           echo "disk      :"; df -h / /tmp | sed 's/^/            /'
           echo "memory    :"; free -h 2>/dev/null | sed 's/^/            /' || :
-          cat /etc/kylin-release 2>/dev/null || cat /etc/rocky-release 2>/dev/null || cat /etc/os-release
+          cat /etc/kylin-release 2>/dev/null || cat /etc/os-release
 
       - name: 检出打包工程（spec + scripts）
         uses: actions/checkout@v4
@@ -82,40 +78,20 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
-      - name: 检出 PostgreSQL 源码
-        uses: actions/checkout@v4
+      - name: 缓存源码包
+        uses: actions/cache@v4
         with:
-          repository: ${{ github.repository }}
-          ref: ${{ env.SRC_REF }}
-          path: src
-          fetch-depth: 1
-          persist-credentials: false
+          path: |
+            /var/cache/pgsrc
+          key: pg15-ky10-${{ runner.arch }}-pgsrc-dnf-v1
 
-      - name: 校验源码版本
-        shell: bash
-        run: |
-          set -e
-          v="$(grep -m1 '^PACKAGE_VERSION=' src/configure | cut -d"'" -f2)"
-          echo "detected version: $v"
-          [ "$v" = "15.17" ] || { echo "::error::源码版本为 $v，本流水线只负责 15.17"; exit 1; }
-          if command -v git >/dev/null 2>&1; then
-            git -C src rev-parse HEAD | tee /tmp/src_commit.txt
-          else
-            echo "unknown (no git in image)" | tee /tmp/src_commit.txt
-          fi
-
-      - name: 释放磁盘（源码 .git 约 100MB）
-        shell: bash
-        run: rm -rf src/.git && df -h / | sed 's/^/          /'
-
-      - name: 安装构建依赖
+      - name: 安装构建依赖（含下载源码包）
         shell: bash
         run: bash pkg/scripts/prepare-build-env.sh
 
       - name: 构建 RPM（source + binary + debuginfo）
         shell: bash
         env:
-          SRC_DIR: ${{ github.workspace }}/src
           ALLOW_UNPACKAGED: ${{ github.event.inputs.allow_unpackaged == 'true' && '1' || '0' }}
         run: bash pkg/scripts/build-rpm.sh
 
@@ -127,10 +103,10 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: build-logs-pg15-kylin
+          name: build-logs-pg15-ky10
           path: |
             ${{ env.RPMBUILD_TOP }}/build.log
-            ${{ env.RPMBUILD_TOP }}/BUILD/${{ env.SRC_NAME }}/buildroot-files.txt
+            ${{ env.RPMBUILD_TOP }}/BUILD/postgresql-15.17/buildroot-files.txt
           if-no-files-found: warn
           retention-days: 7
 
