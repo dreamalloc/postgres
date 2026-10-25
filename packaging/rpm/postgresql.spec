@@ -29,9 +29,13 @@
 %global with_plperl %{?with_plperl}%{!?with_plperl:1}
 %global with_pltcl  %{?with_pltcl}%{!?with_pltcl:1}
 %global with_test   %{?with_test}%{!?with_test:0}
+# 调试包：默认生成 debuginfo 与 debugsource；瘦身构建可 --define "with_debug 0"
+%global with_debug   %{?with_debug}%{!?with_debug:1}
 
 %global _binary_payload w2.xzdio
+%if "%{with_debug}" == "0"
 %global debug_package %{nil}
+%endif
 
 %if 0%{?oe2403}
 %global extra_warn -Wno-stringop-overflow -Wno-maybe-uninitialized -Wno-array-bounds

@@ -58,17 +58,21 @@ fi
 echo "    子包齐全: libs server contrib devel plperl plpython3 pltcl"
 
 echo
-echo "=================== 3. debuginfo ======================"
-DBG="$(find RPMS -name '*server-debuginfo-*.rpm' | sort | sed -n '1p' || true)"
-if [ -z "$DBG" ]; then
-    DBG="$(find RPMS -name '*-debuginfo-*.rpm' | grep -v debugsource | sort | sed -n '1p' || true)"
-fi
+echo "=================== 3. debuginfo / debugsource ========"
 DBG_ALL="$(find RPMS -name '*-debuginfo-*.rpm' | wc -l)"
-if [ -n "$DBG" ]; then
-    echo "    debuginfo 包 ${DBG_ALL} 个，代表: $(basename "$DBG") ($(du -h "$DBG" | cut -f1))"
-    echo "    其中 .debug 文件 $(rpm -qlp "$DBG" | grep -c '\.debug$') 个"
+DSRC_ALL="$(find RPMS -name '*-debugsource-*.rpm' | wc -l)"
+if [ "${DBG_ALL}" -lt 1 ]; then
+    echo "!! 未生成任何 debuginfo 包（with_debug 是否被置为 0？）"; exit 1
+fi
+DBG="$(find RPMS -name '*server-debuginfo-*.rpm' | sort | sed -n '1p' || true)"
+[ -z "$DBG" ] && DBG="$(find RPMS -name '*-debuginfo-*.rpm' | sort | sed -n '1p')"
+echo "    debuginfo 包 ${DBG_ALL} 个 / debugsource 包 ${DSRC_ALL} 个"
+echo "    代表: $(basename "$DBG") ($(du -h "$DBG" | cut -f1))，.debug 文件 $(rpm -qlp "$DBG" | grep -c '\.debug$') 个"
+if [ "${DSRC_ALL}" -ge 1 ]; then
+    DSRC="$(find RPMS -name '*-debugsource-*.rpm' | sort | sed -n '1p')"
+    echo "    代表: $(basename "$DSRC") ($(du -h "$DSRC" | cut -f1))，源文件 $(rpm -qlp "$DSRC" | grep -cE '\.(c|h|y|l)$') 个"
 else
-    echo "    debuginfo: 未生成（debug_package 已关闭，可接受）"
+    echo "    !! 未生成 debugsource：检查 optflags 是否含 -g、有无 -fdebug-prefix-map"
 fi
 
 echo
